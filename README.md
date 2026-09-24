@@ -17,7 +17,7 @@ python script.py
 python script.py --text corpus.txt --epochs 10 --prompt "je suis" --save model.pt
 ```
 
-Utilise `python script.py --help` pour les options du device, du batch, du contexte et du taux d'apprentissage.
+Le corpus par defaut est `data/train.txt`. Utilise `python script.py --text autre_corpus.txt` pour en charger un autre, ou `python script.py --help` pour les options du device, du batch, du contexte et du taux d'apprentissage.
 
 ## Organisation
 

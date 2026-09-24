@@ -11,16 +11,21 @@ from pathlib import Path
 import torch
 
 from config import GPT_CONFIG_SMALL
-from dataset import DEFAULT_TEXT, create_dataloaders
+from dataset import create_dataloaders
 from generate import generate_and_print_sample
 from GPT import GPTModel
 from tokenizer import get_tokenizer
 from train import train_model_simple
 
+DEFAULT_DATA_PATH = Path(__file__).resolve().parent / "data" / "train.txt"
+
 
 def parse_args():
 	parser = argparse.ArgumentParser(description="Entraîner un petit GPT-like.")
-	parser.add_argument("--text", type=Path, help="Fichier texte à utiliser comme corpus.")
+	parser.add_argument(
+		"--text", type=Path, default=DEFAULT_DATA_PATH,
+		help="Fichier texte à utiliser comme corpus (défaut: data/train.txt).",
+	)
 	parser.add_argument("--prompt", default="je suis", help="Texte de départ.")
 	parser.add_argument("--epochs", type=int, default=5)
 	parser.add_argument("--batch-size", type=int, default=2)
@@ -45,7 +50,9 @@ def main():
 		raise RuntimeError("CUDA a été demandé mais n'est pas disponible.")
 
 	tokenizer = get_tokenizer()
-	text = args.text.read_text(encoding="utf-8") if args.text else DEFAULT_TEXT
+	if not args.text.is_file():
+		raise FileNotFoundError("Corpus introuvable : {}".format(args.text))
+	text = args.text.read_text(encoding="utf-8")
 	train_loader, val_loader = create_dataloaders(
 		text, tokenizer, args.block_size, args.stride, args.batch_size
 	)
