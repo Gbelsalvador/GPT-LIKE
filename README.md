@@ -19,6 +19,15 @@ python script.py --text corpus.txt --epochs 10 --prompt "je suis" --save model.p
 
 Le corpus par defaut est `data/train.txt`. Utilise `python script.py --text autre_corpus.txt` pour en charger un autre, ou `python script.py --help` pour les options du device, du batch, du contexte et du taux d'apprentissage.
 
+## Generer avec un modele enregistre
+
+```powershell
+python script.py --generate --prompt "je suis"
+python script.py --generate --model chemin/vers/modele.pt --prompt "je suis"
+```
+
+Sans `--model`, le script charge `model.pt` a la racine du projet. Entraine et enregistre d'abord le modele avec `--save model.pt` si ce fichier n'existe pas encore.
+
 ## Organisation
 
 - `script.py` : point d'entree CLI.

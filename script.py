@@ -18,6 +18,7 @@ from tokenizer import get_tokenizer
 from train import train_model_simple
 
 DEFAULT_DATA_PATH = Path(__file__).resolve().parent / "data" / "train.txt"
+DEFAULT_MODEL_PATH = Path(__file__).resolve().parent / "model.pt"
 
 
 def parse_args():
@@ -27,6 +28,9 @@ def parse_args():
 		help="Fichier texte à utiliser comme corpus (défaut: data/train.txt).",
 	)
 	parser.add_argument("--prompt", default="je suis", help="Texte de départ.")
+	parser.add_argument("--generate", action="store_true", help="Générer avec un modèle déjà enregistré.")
+	parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH,
+		help="Checkpoint à charger pour la génération (défaut: model.pt).")
 	parser.add_argument("--epochs", type=int, default=5)
 	parser.add_argument("--batch-size", type=int, default=2)
 	parser.add_argument("--block-size", type=int, default=32)
@@ -50,6 +54,17 @@ def main():
 		raise RuntimeError("CUDA a été demandé mais n'est pas disponible.")
 
 	tokenizer = get_tokenizer()
+	if args.generate:
+		if not args.model.is_file():
+			raise FileNotFoundError("Modèle introuvable : {}".format(args.model))
+		checkpoint = torch.load(args.model, map_location=device)
+		model = GPTModel(checkpoint["config"]).to(device)
+		model.load_state_dict(checkpoint["model_state"])
+		print("model loaded from:", args.model)
+		print("sample:")
+		generate_and_print_sample(model, tokenizer, device, args.prompt)
+		return
+
 	if not args.text.is_file():
 		raise FileNotFoundError("Corpus introuvable : {}".format(args.text))
 	text = args.text.read_text(encoding="utf-8")
