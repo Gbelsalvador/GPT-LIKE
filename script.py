@@ -29,6 +29,8 @@ def parse_args():
 	)
 	parser.add_argument("--prompt", default="je suis", help="Texte de départ.")
 	parser.add_argument("--generate", action="store_true", help="Générer avec un modèle déjà enregistré.")
+	parser.add_argument("--max-new-tokens", type=int, default=50,
+		help="Nombre maximal de tokens à générer (défaut: 50).")
 	parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH,
 		help="Checkpoint à charger pour la génération (défaut: model.pt).")
 	parser.add_argument("--epochs", type=int, default=5)
@@ -62,7 +64,7 @@ def main():
 		model.load_state_dict(checkpoint["model_state"])
 		print("model loaded from:", args.model)
 		print("sample:")
-		generate_and_print_sample(model, tokenizer, device, args.prompt)
+		generate_and_print_sample(model, tokenizer, device, args.prompt, args.max_new_tokens)
 		return
 
 	if not args.text.is_file():
@@ -84,7 +86,7 @@ def main():
 		args.eval_freq, args.eval_iter, args.prompt, tokenizer
 	)
 	print("\nsample:")
-	generate_and_print_sample(model, tokenizer, device, args.prompt)
+	generate_and_print_sample(model, tokenizer, device, args.prompt, args.max_new_tokens)
 
 	if args.save:
 		torch.save({"model_state": model.state_dict(), "config": config}, args.save)

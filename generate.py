@@ -17,13 +17,13 @@ def generate_text_simple(model, idx, max_new_tokens, context_size):
     return idx
 
 
-def generate_and_print_sample(model, tokenizer, device, start_context):
+def generate_and_print_sample(model, tokenizer, device, start_context, max_new_tokens=50):
     model.eval()
     context_size = model.pos_emb.weight.shape[0]
     encoded = text_to_token_ids(start_context, tokenizer).to(next(model.parameters()).device)
     with torch.no_grad():
         token_ids = generate_text_simple(
-            model=model,idx=encoded, max_new_tokens=50, context_size=context_size
+            model=model, idx=encoded, max_new_tokens=max_new_tokens, context_size=context_size
         )
 
     decoded_text = token_ids_to_text(token_ids, tokenizer)

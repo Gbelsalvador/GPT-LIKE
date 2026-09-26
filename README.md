@@ -22,8 +22,8 @@ Le corpus par defaut est `data/train.txt`. Utilise `python script.py --text autr
 ## Generer avec un modele enregistre
 
 ```powershell
-python script.py --generate --prompt "je suis"
-python script.py --generate --model chemin/vers/modele.pt --prompt "je suis"
+python script.py --generate --prompt "je suis" --max-new-tokens 100
+python script.py --generate --model chemin/vers/modele.pt --prompt "je suis" --max-new-tokens 100
 ```
 
 Sans `--model`, le script charge `model.pt` a la racine du projet. Entraine et enregistre d'abord le modele avec `--save model.pt` si ce fichier n'existe pas encore.
