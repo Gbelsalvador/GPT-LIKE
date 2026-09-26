@@ -29,7 +29,7 @@ class InstructionDataset(Dataset):
         self.examples = []
         max_sequence_length = context_length + 1
 
-        with data_path.open("r", encoding="utf-8") as data_file:
+        with data_path.open("r", encoding="utf-8-sig") as data_file:
             for line_number, line in enumerate(data_file, start=1):
                 if not line.strip():
                     continue
