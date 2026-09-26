@@ -30,13 +30,13 @@ Sans `--model`, le script charge `model.pt` a la racine du projet. Entraine et e
 
 ## Fine-tuning supervisé
 
-Après le pré-entraînement, `finetuner.py` adapte un checkpoint existant à des exemples d'instructions et de réponses. Le dataset par défaut est `data/instructions.jsonl` ; chaque ligne est un objet JSON avec `instruction`, `response` et, facultativement, `input` pour fournir du contexte.
+Après le pré-entraînement, `finetuner.py` adapte un checkpoint existant à des exemples d'instructions et de réponses. Le dataset par défaut est `data/instructions.jsonl` ; chaque ligne est un objet JSON avec uniquement deux champs : `instruction` et `output`.
 
 ```powershell
 python finetuner.py --model model.pt --data data/instructions.jsonl --epochs 3 --save finetuned_model.pt
 ```
 
-Le checkpoint obtenu conserve le format attendu par `script.py --generate`. La perte est calculée sur la réponse, pas sur le texte de l'instruction. Remplace ou complète le dataset d'exemple par des données représentatives de la tâche visée.
+Le checkpoint obtenu conserve le format attendu par `script.py --generate`. La perte est calculée sur `output`, pas sur le texte de l'instruction. Remplace ou complète le dataset d'exemple par des données représentatives de la tâche visée.
 
 ## Organisation
 
@@ -46,7 +46,7 @@ Le checkpoint obtenu conserve le format attendu par `script.py --generate`. La p
 - `GPT.py` : modele GPT-like PyTorch.
 - `loss.py` : cross-entropy et evaluation.
 - `train.py` : boucle d'entrainement.
-- `finetuner.py` : fine-tuning supervisé sur des paires instruction/réponse.
+- `finetuner.py` : fine-tuning supervisé sur des paires instruction/output.
 - `generate.py` : generation autoregressive.
 - `tokenizer.py` : conversion texte/tokens avec tiktoken.
 - `architecture/` : implementations pedagogiques conservees telles quelles.

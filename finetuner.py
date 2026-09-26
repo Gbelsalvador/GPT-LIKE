@@ -41,18 +41,13 @@ class InstructionDataset(Dataset):
                     ) from error
 
                 instruction = record.get("instruction")
-                response = record.get("response")
-                extra_input = record.get("input", "")
+                response = record.get("output")
                 if not isinstance(instruction, str) or not instruction.strip():
                     raise ValueError("'instruction' doit être une chaîne non vide (ligne {}).".format(line_number))
                 if not isinstance(response, str) or not response.strip():
-                    raise ValueError("'response' doit être une chaîne non vide (ligne {}).".format(line_number))
-                if not isinstance(extra_input, str):
-                    raise ValueError("'input' doit être une chaîne (ligne {}).".format(line_number))
+                    raise ValueError("'output' doit être une chaîne non vide (ligne {}).".format(line_number))
 
                 prompt = "### Instruction:\n{}".format(instruction.strip())
-                if extra_input.strip():
-                    prompt += "\n\n### Contexte:\n{}".format(extra_input.strip())
                 prompt += "\n\n### Réponse:\n"
 
                 prompt_ids = tokenizer.encode(prompt)
