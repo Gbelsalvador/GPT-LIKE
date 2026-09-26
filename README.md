@@ -28,6 +28,16 @@ python script.py --generate --model chemin/vers/modele.pt --prompt "je suis" --m
 
 Sans `--model`, le script charge `model.pt` a la racine du projet. Entraine et enregistre d'abord le modele avec `--save model.pt` si ce fichier n'existe pas encore.
 
+## Fine-tuning supervisé
+
+Après le pré-entraînement, `finetuner.py` adapte un checkpoint existant à des exemples d'instructions et de réponses. Le dataset par défaut est `data/instructions.jsonl` ; chaque ligne est un objet JSON avec `instruction`, `response` et, facultativement, `input` pour fournir du contexte.
+
+```powershell
+python finetuner.py --model model.pt --data data/instructions.jsonl --epochs 3 --save finetuned_model.pt
+```
+
+Le checkpoint obtenu conserve le format attendu par `script.py --generate`. La perte est calculée sur la réponse, pas sur le texte de l'instruction. Remplace ou complète le dataset d'exemple par des données représentatives de la tâche visée.
+
 ## Organisation
 
 - `script.py` : point d'entree CLI.
@@ -36,6 +46,7 @@ Sans `--model`, le script charge `model.pt` a la racine du projet. Entraine et e
 - `GPT.py` : modele GPT-like PyTorch.
 - `loss.py` : cross-entropy et evaluation.
 - `train.py` : boucle d'entrainement.
+- `finetuner.py` : fine-tuning supervisé sur des paires instruction/réponse.
 - `generate.py` : generation autoregressive.
 - `tokenizer.py` : conversion texte/tokens avec tiktoken.
 - `architecture/` : implementations pedagogiques conservees telles quelles.
