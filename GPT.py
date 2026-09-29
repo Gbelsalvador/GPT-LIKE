@@ -122,7 +122,7 @@ class GPTModel(nn.Module):
             cfg["emb_dim"], cfg["vocab_size"], bias=False 
         ) 
 
-    def forward(self, in_idx): 
+    def forward_features(self, in_idx):
         batch_size, seq_len = in_idx.shape 
         if seq_len > self.pos_emb.num_embeddings:
             raise ValueError(
@@ -136,5 +136,7 @@ class GPTModel(nn.Module):
         x = self.drop_emb(x) 
         x = self.trf_blocks(x) 
         x = self.final_norm(x) 
-        logits = self.out_head(x) 
-        return logits
+        return x
+
+    def forward(self, in_idx):
+        return self.out_head(self.forward_features(in_idx))

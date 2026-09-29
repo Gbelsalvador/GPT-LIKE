@@ -10,7 +10,7 @@ import random
 from pathlib import Path
 
 import torch
-from torch.utils.data import DataLoader, Dataset, random_split
+from torch.utils.data import DataLoader, Dataset, Subset, random_split
 
 from GPT import GPTModel
 from tokenizer import get_tokenizer
@@ -19,6 +19,8 @@ PROJECT_DIR = Path(__file__).resolve().parent
 DEFAULT_DATA_PATH = PROJECT_DIR / "data" / "instructions.jsonl"
 DEFAULT_MODEL_PATH = PROJECT_DIR / "model.pt"
 DEFAULT_SAVE_PATH = PROJECT_DIR / "finetuned_model.pt"
+DEFAULT_CLASSIFICATION_DATA_PATH = PROJECT_DIR / "data" / "classification.jsonl"
+DEFAULT_CLASSIFICATION_SAVE_PATH = PROJECT_DIR / "classification_model.pt"
 IGNORE_INDEX = -100
 
 
@@ -110,10 +112,176 @@ def average_loss(model, data_loader, device):
     return total_loss / len(data_loader)
 
 
+class ClassificationDataset(Dataset):
+    """Tokenized text/label examples for sequence classification."""
+
+    def __init__(self, data_path, tokenizer, context_length):
+        records = []
+        with data_path.open("r", encoding="utf-8-sig") as data_file:
+            for line_number, line in enumerate(data_file, start=1):
+                if not line.strip():
+                    continue
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError as error:
+                    raise ValueError(
+                        "JSON invalide à la ligne {} de {}.".format(line_number, data_path)
+                    ) from error
+
+                text = record.get("text")
+                label = record.get("label")
+                if not isinstance(text, str) or not text.strip():
+                    raise ValueError("'text' doit être une chaîne non vide (ligne {}).".format(line_number))
+                if not isinstance(label, str) or not label.strip():
+                    raise ValueError("'label' doit être une chaîne non vide (ligne {}).".format(line_number))
+                records.append((text.strip(), label.strip()))
+
+        if not records:
+            raise ValueError("Aucun exemple d'entraînement trouvé dans {}.".format(data_path))
+
+        self.labels = sorted({label for _, label in records})
+        label_to_id = {label: index for index, label in enumerate(self.labels)}
+        self.examples = []
+        for text, label in records:
+            token_ids = tokenizer.encode(text)[:context_length]
+            if not token_ids:
+                raise ValueError("Un texte ne produit aucun token dans {}.".format(data_path))
+            self.examples.append((token_ids, label_to_id[label]))
+
+    def __len__(self):
+        return len(self.examples)
+
+    def __getitem__(self, index):
+        return self.examples[index]
+
+
+def collate_classification_examples(batch):
+    max_length = max(len(token_ids) for token_ids, _ in batch)
+    input_batch = torch.zeros((len(batch), max_length), dtype=torch.long)
+    lengths = torch.empty(len(batch), dtype=torch.long)
+    labels = torch.empty(len(batch), dtype=torch.long)
+    for row, (token_ids, label) in enumerate(batch):
+        input_batch[row, :len(token_ids)] = torch.tensor(token_ids, dtype=torch.long)
+        lengths[row] = len(token_ids)
+        labels[row] = label
+    return input_batch, lengths, labels
+
+
+class GPTClassifier(torch.nn.Module):
+    """GPT backbone with a trainable sequence-classification head."""
+
+    def __init__(self, config, num_labels):
+        super().__init__()
+        self.backbone = GPTModel(config)
+        self.classifier = torch.nn.Linear(config["emb_dim"], num_labels)
+
+    def forward(self, input_ids, lengths):
+        hidden_states = self.backbone.forward_features(input_ids)
+        last_token_indices = lengths.to(input_ids.device) - 1
+        batch_indices = torch.arange(input_ids.size(0), device=input_ids.device)
+        pooled = hidden_states[batch_indices, last_token_indices]
+        return self.classifier(pooled)
+
+
+def split_classification_dataset(dataset, seed):
+    indices_by_label = {label_id: [] for label_id in range(len(dataset.labels))}
+    for index, (_, label_id) in enumerate(dataset.examples):
+        indices_by_label[label_id].append(index)
+
+    rng = random.Random(seed)
+    train_indices = []
+    validation_indices = []
+    for label_id, indices in indices_by_label.items():
+        if len(indices) < 2:
+            raise ValueError(
+                "Chaque classe doit avoir au moins deux exemples; classe: {}.".format(
+                    dataset.labels[label_id]
+                )
+            )
+        rng.shuffle(indices)
+        validation_size = max(1, int(len(indices) * 0.1))
+        validation_indices.extend(indices[:validation_size])
+        train_indices.extend(indices[validation_size:])
+
+    return Subset(dataset, train_indices), Subset(dataset, validation_indices)
+
+
+def evaluate_classifier(model, data_loader, device):
+    model.eval()
+    total_loss = 0.0
+    correct = 0
+    example_count = 0
+    with torch.no_grad():
+        for input_batch, lengths, label_batch in data_loader:
+            input_batch = input_batch.to(device)
+            lengths = lengths.to(device)
+            label_batch = label_batch.to(device)
+            logits = model(input_batch, lengths)
+            total_loss += torch.nn.functional.cross_entropy(logits, label_batch).item()
+            correct += (logits.argmax(dim=1) == label_batch).sum().item()
+            example_count += label_batch.size(0)
+    model.train()
+    return total_loss / len(data_loader), correct / example_count
+
+
+def train_classifier(args, checkpoint, device, tokenizer):
+    config = checkpoint["config"]
+    dataset = ClassificationDataset(args.data, tokenizer, config["context_length"])
+    if len(dataset.labels) < 2:
+        raise ValueError("La classification nécessite au moins deux classes.")
+    train_dataset, val_dataset = split_classification_dataset(dataset, args.seed)
+    train_loader = DataLoader(
+        train_dataset, batch_size=args.batch_size, shuffle=True,
+        collate_fn=collate_classification_examples,
+    )
+    val_loader = DataLoader(
+        val_dataset, batch_size=args.batch_size, shuffle=False,
+        collate_fn=collate_classification_examples,
+    )
+
+    model = GPTClassifier(config, len(dataset.labels)).to(device)
+    model.backbone.load_state_dict(checkpoint["model_state"])
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=0.01)
+
+    print("device:", device)
+    print("classes:", ", ".join(dataset.labels))
+    print("examples:", len(dataset), "| train:", len(train_dataset), "| validation:", len(val_dataset))
+    for epoch in range(args.epochs):
+        model.train()
+        total_loss = 0.0
+        for input_batch, lengths, label_batch in train_loader:
+            input_batch = input_batch.to(device)
+            lengths = lengths.to(device)
+            label_batch = label_batch.to(device)
+            optimizer.zero_grad()
+            logits = model(input_batch, lengths)
+            loss = torch.nn.functional.cross_entropy(logits, label_batch)
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+
+        train_loss = total_loss / len(train_loader)
+        val_loss, val_accuracy = evaluate_classifier(model, val_loader, device)
+        print("epoch {}/{} | train loss {:.4f} | val loss {:.4f} | val accuracy {:.1%}".format(
+            epoch + 1, args.epochs, train_loss, val_loss, val_accuracy
+        ))
+
+    args.save.parent.mkdir(parents=True, exist_ok=True)
+    torch.save({
+        "task": "classification",
+        "model_state": model.state_dict(),
+        "config": config,
+        "labels": dataset.labels,
+    }, args.save)
+    print("classification model saved to:", args.save)
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Fine-tuner supervisé du modèle GPT-like.")
-    parser.add_argument("--data", type=Path, default=DEFAULT_DATA_PATH,
-                        help="Dataset JSONL (défaut: data/instructions.jsonl).")
+    parser.add_argument("--task", choices=("instruction", "classification"), default="instruction",
+                        help="Tâche à fine-tuner (défaut: instruction).")
+    parser.add_argument("--data", type=Path, default=None,
+                        help="Dataset JSONL adapté à la tâche choisie.")
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH,
                         help="Checkpoint pré-entraîné à charger (défaut: model.pt).")
     parser.add_argument("--save", type=Path, default=DEFAULT_SAVE_PATH,
@@ -128,6 +296,11 @@ def parse_args():
 
 def main():
     args = parse_args()
+    if args.data is None:
+        args.data = (DEFAULT_CLASSIFICATION_DATA_PATH if args.task == "classification"
+                     else DEFAULT_DATA_PATH)
+    if args.save == DEFAULT_SAVE_PATH and args.task == "classification":
+        args.save = DEFAULT_CLASSIFICATION_SAVE_PATH
     if args.epochs < 1 or args.batch_size < 1:
         raise ValueError("--epochs et --batch-size doivent être supérieurs à zéro.")
     if args.learning_rate <= 0:
@@ -148,6 +321,10 @@ def main():
         raise ValueError("Le checkpoint doit contenir 'config' et 'model_state'.")
     config = checkpoint["config"]
     tokenizer = get_tokenizer()
+    if args.task == "classification":
+        train_classifier(args, checkpoint, device, tokenizer)
+        return
+
     dataset = InstructionDataset(args.data, tokenizer, config["context_length"])
 
     if len(dataset) < 2:

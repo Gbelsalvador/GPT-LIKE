@@ -38,6 +38,17 @@ python finetuner.py --model model.pt --data data/instructions.jsonl --epochs 3 -
 
 Le checkpoint obtenu conserve le format attendu par `script.py --generate`. La perte est calculée sur `output`, pas sur le texte de l'instruction. Remplace ou complète le dataset d'exemple par des données représentatives de la tâche visée.
 
+### Fine-tuning de classification
+
+Le mode classification apprend à associer un texte à une étiquette. Le dataset fourni (`data/classification.jsonl`) contient des exemples français de sentiment avec les champs `text` et `label`. Il sert de démonstration; pour un usage réel, remplace-le par des exemples représentatifs et suffisamment nombreux.
+
+```powershell
+python finetuner.py --task classification --model model.pt --epochs 3
+python classify.py --model classification_model.pt --text "Le service était excellent."
+```
+
+Le mode classification crée une tête de classification au-dessus du GPT, entraîne aussi le backbone et enregistre séparément `classification_model.pt`. Les sorties donnent l'étiquette prédite et sa confiance. Le checkpoint de classification n'est pas un checkpoint de génération.
+
 ## Organisation
 
 - `script.py` : point d'entree CLI.
@@ -46,7 +57,8 @@ Le checkpoint obtenu conserve le format attendu par `script.py --generate`. La p
 - `GPT.py` : modele GPT-like PyTorch.
 - `loss.py` : cross-entropy et evaluation.
 - `train.py` : boucle d'entrainement.
-- `finetuner.py` : fine-tuning supervisé sur des paires instruction/output.
+- `finetuner.py` : fine-tuning supervisé pour les instructions ou la classification.
+- `classify.py` : prédiction avec un checkpoint fine-tuné pour la classification.
 - `generate.py` : generation autoregressive.
 - `tokenizer.py` : conversion texte/tokens avec tiktoken.
 - `architecture/` : implementations pedagogiques conservees telles quelles.
